@@ -52,13 +52,10 @@
   (get-in mo [key]))
 
 (defn load-modules [owner path]
-  (println "path" path)
   (let [moduleIDs  (get-key r/load-for path)]
-    (println "moduleId" moduleIDs)
     (let [p (p/all [(modules/load-module-map owner moduleIDs)])]
       (p/then p (fn [[r1 r2]]
-                  (compassus/set-route! owner path)
-                  (println "r2" r2))))))
+                  (compassus/set-route! owner path))))))
 
 (defn- change-route [c route e]
   (.preventDefault e)
@@ -68,21 +65,21 @@
   Object
   (componentWillMount [this]
     (let [path (compassus/current-route this)
-          module (str "outer")
-          loaded? (modules/loaded? module)]
+          module (get-key r/load-for path)]
       (let [{:keys [owner]} (om/props this)]
-        (om/set-state! owner {:loading {} :loaded {module loaded?}}))
+        (om/set-state! owner {:loading {} :loaded false}))
       ))
   (componentWillReceiveProps [this next-props]
     (let [{:keys [owner]} (om/props this)]
       (let [route (str (pr-str (compassus/current-route this)))
             next-module (r/inner? route)
-            module (get-module this)]
+            module (get-key r/load-for route)]
         )))
   (render [this]
     (let [{:keys [owner factory props]} (om/props this)]
       (let [route (compassus/current-route owner)
-            module (str "outer")]
+            module (get-key r/load-for route)
+            m (js->clj (om/get-state owner [:loaded]))]
         (dom/div nil
                  (dom/a #js {:href "#"
                              :style (when (= route :app/about)
@@ -96,7 +93,7 @@
                                            :cursor "text"})
                              :onClick #(change-route owner :about %)}
                         "About")
-                 (if (om/get-state owner [:loaded module])
+                 (if (om/get-state owner [:loaded])
                    (factory props)
                    (home/Spinner)))))))
 

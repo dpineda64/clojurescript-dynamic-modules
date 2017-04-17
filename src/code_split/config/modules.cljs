@@ -25,11 +25,16 @@
        "outer" []})
 
 
+(def module-data
+  #js ["inner","outer"])
+
+
 (def manager (module-manager/getInstance))
 (def loader (goog.module.ModuleLoader.))
 (.setLoader manager loader)
 (.setAllModuleInfo manager module-info)
 (.setModuleUris manager modules)
+
 
 (defn loaded? [id]
   (let [mo (.getModuleInfo manager id)]
@@ -48,13 +53,20 @@
                               (a/close! chan)))
     chan))
 
+(defn load-m [m info owner]
+  (.log js/console m)
+  (let [chan (a/chan)]
+    (.loadModules loader m info (fn []
+                                  (om/react-set-state! owner {:loaded true})
+                                  (a/close! chan))
+                  (fn [error]
+                    (.log js/console "error "error)))))
 
 (defn load-module-production [owner module]
-  (println "form modsules" module)
-  (.log js/console  (om/get-state owner [:loaded module]))
-  (.log js/console  (not (om/get-state owner [:loading module])))
+  (.log js/console (om/get-state owner [:loaded module]))
+  (.log js/console (not (om/get-state owner [:loading module])))
   (when (and
-             (not (om/get-state owner [:loading module])))
+          (not (om/get-state owner [:loading module])))
     ;; actually load the module
     (let [loading (require-module module)]
       (om/react-set-state! owner {:loaded {module false}} #(.log js/console false))
@@ -64,6 +76,15 @@
         (p/promise (fn [resolve reject]
                      (om/react-set-state! owner {:loaded {module true}} #(.log js/console true))
                      (resolve)))))))
+
+
+
+(defn load-multiple [owner modules]
+ (when (and (not (om/get-state owner [:loading modules])))
+   (let [loading (load-m (clj->js modules) (-> manager (.-moduleInfoMap_)) owner)]
+     (om/react-set-state! owner {:loaded {modules false}} #())
+     (om/react-set-state! owner {:loading {modules loading}} #()))))
+
 (defn is-last [data id]
   (let [last-item (last data)]
     (if (= id last-item)
@@ -71,9 +92,8 @@
       false)))
 
 (defn load-module-map [owner modules]
-  (mapcat (fn [id]
-            (let [ll (load-module-production owner id)]
-              (.log js/console "LLLLLL!" ll))) modules))
+  (load-multiple owner modules))
+
 
 
 (defn load-multiples [modules]
