@@ -80,7 +80,7 @@
 
 
 (defn load-multiple [owner modules]
- (when (and (not (om/get-state owner [:loading modules])))
+ (when (and (not (om/get-state owner [:loading true])))
    (let [loading (load-m (clj->js modules) (-> manager (.-moduleInfoMap_)) owner)]
      (om/react-set-state! owner {:loaded {modules false}} #())
      (om/react-set-state! owner {:loading {modules loading}} #()))))

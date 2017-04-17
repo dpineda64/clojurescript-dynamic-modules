@@ -11,9 +11,11 @@
             [code-split.views.dashboard :as dashboard]
             [sablono.core :as html :refer-macros [html]]
             [code-split.config.page-dispatch :as page  :refer [active-page]]
-            [code-split.config.modules :as modules :refer [load-module-production load-module-dev]]
+    ;; [code-split.config.modules :as modules :refer [load-module-production load-module-dev]]
             [compassus.core :as compassus]
-            [pushy.core :as pushy])
+            [pushy.core :as pushy]
+            [code-split.dml.core :as dml]
+            [code-split.dml.loader :as loader])
   (:use [cljs.pprint :only [pprint]]))
 
 (enable-console-print!)
@@ -37,48 +39,21 @@
   (pushy/pushy update-route!
                (partial bidi/match-route routes)))
 
-(def reconcilier
-  (om/reconciler
-    {:state app-state
-     :parser (compassus/parser {:read read})}))
-
-(defn get-module [this]
-  (let [path (compassus/current-route this)]
-    (if (r/inner? (bidi/path-for routes path))
-      (str "inner")
-      (str "outer"))))
-
-(defn get-key [mo key]
-  (get-in mo [key]))
-
-(defn load-modules [owner path]
-  (let [moduleIDs  (get-key r/load-for path)]
-    (let [p (p/all [(modules/load-module-map owner moduleIDs)])]
-      (p/then p (fn [[r1 r2]]
-                  (compassus/set-route! owner path))))))
-
 (defn- change-route [c route e]
   (.preventDefault e)
-  (load-modules c route))
+  (dml/load-modules c route r/load-for (compassus/set-route! c route)))
+
 
 (defui render
   Object
   (componentWillMount [this]
-    (let [path (compassus/current-route this)
-          module (get-key r/load-for path)]
+    (let [path (compassus/current-route this)]
       (let [{:keys [owner]} (om/props this)]
-        (om/set-state! owner {:loading {} :loaded false}))
-      ))
-  (componentWillReceiveProps [this next-props]
-    (let [{:keys [owner]} (om/props this)]
-      (let [route (str (pr-str (compassus/current-route this)))
-            next-module (r/inner? route)
-            module (get-key r/load-for route)]
-        )))
+        (om/set-state! owner {:loading {} :loaded false}))))
   (render [this]
     (let [{:keys [owner factory props]} (om/props this)]
       (let [route (compassus/current-route owner)
-            module (get-key r/load-for route)
+            module (get-in r/load-for [route])
             m (js->clj (om/get-state owner [:loaded]))]
         (dom/div nil
                  (dom/a #js {:href "#"
@@ -95,7 +70,10 @@
                         "About")
                  (if (om/get-state owner [:loaded])
                    (factory props)
-                   (home/Spinner)))))))
+                   (home/Spinner))))))
+  )
+
+
 
 (def app
   (compassus/application
@@ -109,12 +87,21 @@
                                                })})
      :mixins [(compassus/wrap-render render)
               (compassus/will-mount (fn [_]
-                                      (load-modules _ (compassus/current-route _))))
+                                      (dml/load-modules _ (compassus/current-route _) r/load-for)))
               (compassus/did-mount (fn [_]
                                      (pushy/start! history)))
               (compassus/will-unmount (fn [_]
                                         (pushy/stop! history)))]}))
 
+(def modules
+  ;; "map of id -> urls"
+  #js {"inner" "/js/compiled/out/code_split/render_inner.js"
+       "outer" "/js/compiled/out/code_split/render_outer.js"})
+
+(def module-info
+  #js {"inner" []
+       "outer" []})
+(loader/initialize modules module-info)
 (compassus/mount! app (js/document.getElementById "app"))
 
 (defn on-js-reload []
